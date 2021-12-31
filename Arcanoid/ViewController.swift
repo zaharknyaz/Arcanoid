@@ -5,6 +5,9 @@
 //  Created by Захар Князев on 29.12.2021.
 //
 
+//добавить завершение игры когда выбили все блоки с помощью alert или notification
+//добавить проигрыш когда коснулись нижней грани
+
 import UIKit
 
 class ViewController: UIViewController {
@@ -23,6 +26,9 @@ class ViewController: UIViewController {
     func addRocket() {
         //создаем view(ракетку) программно
         viewRocket = UIView(frame: CGRect(x: 30, y: UIScreen.main.bounds.size.height - 100, width: 150, height: 30))
+        
+        //закругляем края ракетки и красим ее в оранжевый цвет
+        viewRocket.layer.cornerRadius = 5
         viewRocket.backgroundColor = UIColor.orange
         //добавим ракетку на основную view
         view.addSubview(viewRocket)
@@ -54,7 +60,7 @@ class ViewController: UIViewController {
         }
     }
     
-    struct Ball {
+    struct Game {
         var center: CGPoint
         var vector: Vector
         
@@ -62,6 +68,10 @@ class ViewController: UIViewController {
         var viewParent: UIView
         
         var viewRocket: UIView
+        
+        //массив блоков
+        var viewBlocks: [UIView] = []
+        
         
         //создаем шарик в parentView
         init(in viewParent: UIView, viewRocket: UIView) {
@@ -71,48 +81,73 @@ class ViewController: UIViewController {
             center = viewParent.center
             vector = Vector(a: CGPoint(x: 0, y: 0), b: CGPoint(x: 5, y: 5))
             viewBall = UIView(frame: CGRect(x: 0, y: 0, width: 10, height: 10))
+            
+            //закругляем края шарика и красим его в красный цвет
+            viewBall.layer.cornerRadius = 5
             viewBall.backgroundColor = UIColor.red
             viewBall.center = center
             viewParent.addSubview(viewBall)
+            
+            //генерируем блоки
+            for _ in 0...20 {
+                //0...viewParent.frame.size.width распределяем блоки по всей ширине экрана
+                let block = UIView(frame: CGRect(x: CGFloat.random(in: 0...viewParent.frame.size.width), y: CGFloat.random(in: 0...400), width: 100, height: 33))
+                
+                //закругляем края блока и красим его в зеленый цвет, добавляем цвет обводки
+                block.layer.cornerRadius = 7
+                block.layer.borderColor = UIColor.gray.cgColor
+                block.layer.borderWidth = 1
+                block.backgroundColor = UIColor.green
+                viewParent.addSubview(block)
+                viewBlocks.append(block)
+            }
+            
+            
         }
         
         //функция определяет, где в следующий момент окажется шарик
         mutating func tic() {
             let newCenter = CGPoint(x: center.x + vector.dx, y: center.y + vector.dy)
            
-            //столкновение шарика с ракеткой
-            //левая боковая грань
-            if center.x < viewRocket.frame.origin.x &&
-            newCenter.x >= viewRocket.frame.origin.x &&
-            newCenter.y >= viewRocket.frame.origin.y &&
-            newCenter.y <= viewRocket.frame.origin.y + viewRocket.frame.size.height {
+            if isHit(oldPosition: center, newPosition: newCenter, rect: viewRocket.frame) == .x {
                 vector.b.x = -vector.b.x
+                vector.b.y = vector.b.y + CGFloat.random(in: -3...3)
             }
             
-            //правая боковая грань
-            if center.x > viewRocket.frame.origin.x + viewRocket.frame.size.width &&
-            newCenter.x <= viewRocket.frame.origin.x + viewRocket.frame.size.width &&
-            newCenter.y >= viewRocket.frame.origin.y &&
-            newCenter.y <= viewRocket.frame.origin.y + viewRocket.frame.size.height {
-                vector.b.x = -vector.b.x
-            }
-            
-            //верхняя грань
-            if center.y < viewRocket.frame.origin.y &&
-            newCenter.y >= viewRocket.frame.origin.y &&
-            newCenter.x >= viewRocket.frame.origin.x &&
-            newCenter.x <= viewRocket.frame.origin.x + viewRocket.frame.size.width {
+            if isHit(oldPosition: center, newPosition: newCenter, rect: viewRocket.frame) == .y {
                 vector.b.y = -vector.b.y
+                vector.b.x = vector.b.x + CGFloat.random(in: -3...3)
             }
             
-            //нижняя грань
-            if center.y > viewRocket.frame.origin.y + viewRocket.frame.size.height &&
-            newCenter.y <= viewRocket.frame.origin.y + viewRocket.frame.size.height &&
-            newCenter.x >= viewRocket.frame.origin.x &&
-            newCenter.x <= viewRocket.frame.origin.x + viewRocket.frame.size.width {
-                vector.b.y = -vector.b.y
+            //определяем встретился ли шарик с блоком и выбиваем блок
+            var indexBlock: Int?
+            for (index, block) in viewBlocks.enumerated() {
+                if isHit(oldPosition: center, newPosition: newCenter, rect: block.frame) == .x {
+                    vector.b.x = -vector.b.x
+                    vector.b.y = vector.b.y + CGFloat.random(in: -3...3)
+                    indexBlock = index
+                }
+                
+                if isHit(oldPosition: center, newPosition: newCenter, rect: block.frame) == .y {
+                    vector.b.y = -vector.b.y
+                    vector.b.x = vector.b.x + CGFloat.random(in: -3...3)
+                    indexBlock = index
+                }
             }
             
+            //выбиваем блоки
+            if let indexBlock = indexBlock {
+                let block = viewBlocks[indexBlock]
+                UIView.animate(withDuration: 0.2, animations: {
+                    block.transform = CGAffineTransform(scaleX: 0.001, y: 0.001)
+                }) { (bool) in
+                    block.removeFromSuperview()
+                }
+
+                viewBlocks.remove(at: indexBlock)
+            }
+            //когда все блоки выбиты нужно завершать игру!!! например alertView
+                        
             center = newCenter
             viewBall.center = newCenter
             
@@ -126,17 +161,64 @@ class ViewController: UIViewController {
                 vector.b.y = -vector.b.y
             }
         }
+        
+        enum HitTarget {
+            case x
+            case y
+        }
+        
+        //определяет было ли касание ракетки и шарика и с какой стороны(верхней или боковой), HitTarget? опционально, если касания не было
+        func isHit(oldPosition: CGPoint, newPosition: CGPoint, rect: CGRect) -> HitTarget? {
+            
+            //столкновение шарика с ракеткой
+            //левая боковая грань
+            if oldPosition.x < rect.origin.x &&
+            newPosition.x >= rect.origin.x &&
+            newPosition.y >= rect.origin.y &&
+            newPosition.y <= rect.origin.y + rect.size.height {
+                return .x
+            }
+            
+            //правая боковая грань
+            if oldPosition.x > rect.origin.x + rect.size.width &&
+            newPosition.x <= rect.origin.x + rect.size.width &&
+            newPosition.y >= rect.origin.y &&
+            newPosition.y <= rect.origin.y + rect.size.height {
+                return .x
+            }
+            
+            //верхняя грань
+            if oldPosition.y < rect.origin.y &&
+            newPosition.y >= rect.origin.y &&
+            newPosition.x >= rect.origin.x &&
+            newPosition.x <= rect.origin.x + rect.size.width {
+                return .y
+            }
+            
+            //нижняя грань
+            if oldPosition.y > rect.origin.y + rect.size.height &&
+            newPosition.y <= rect.origin.y + rect.size.height &&
+            newPosition.x >= rect.origin.x &&
+            newPosition.x <= rect.origin.x + rect.size.width {
+                return .y
+            }
+            
+            //HitTarget? опционально, если касания не было
+            return nil
+            
+        }
+        
     }
     
-    var ball: Ball!
+    var game: Game!
     func addBall() {
-        ball = Ball(in: self.view, viewRocket: viewRocket)
+        game = Game(in: self.view, viewRocket: viewRocket)
     }
     
     func start() {
         //100 фпс
         Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { (timer) in
-            self.ball.tic()
+            self.game.tic()
         }
     }
     
